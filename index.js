@@ -1,32 +1,16 @@
 const R = require('ramda')
 const io = require('socket.io-client')
 const socket = io('https://houmi.herokuapp.com')
-const rp = require('request-promise');
-const siteKey = process.env.SITEKEY
+const rp = require('request-promise')
 
-var Service, Characteristic;
+var Service, Characteristic
 module.exports = function(homebridge) {
-  Service = homebridge.hap.Service;
-  Characteristic = homebridge.hap.Characteristic;
+  Service = homebridge.hap.Service
+  Characteristic = homebridge.hap.Characteristic
   homebridge.registerPlatform("homebridge-houmio", "Houmio", HoumioPlatform)
 }
 
-function HoumioPlatform(log) {
-  this.log = log;
-  this.log("houmio Platform Plugin");
-}
-
-function HoumioAccessory(log, device, api) {
-  this.id = device._id
-  this.name = device.room ? `${device.name} ${device.room}` : device.name
-  this.model = device.protocol
-  this.device = device
-  this.api = api
-  this.log = log
-  this.manufacturer = device.manufacturer
-}
-
-function fetchHoumioLights(){
+function fetchHoumioLights(siteKey){
   return rp({
     uri: `https://houmi.herokuapp.com/api/site/${siteKey}`,
     json: true
@@ -34,21 +18,37 @@ function fetchHoumioLights(){
   .then(({lights}) => lights)
 }
 
+function HoumioPlatform(log, config) {
+  this.log = log
+  const {siteKey} = config
+
+  this.siteKey = siteKey
+  this.fetchHoumioLights = fetchHoumioLights.bind(null, siteKey)
+  this.log(`houmio Platform Plugin, sitekey: ${siteKey}`)
+}
+
+function HoumioAccessory(log, device, siteKey) {
+  this.id = device._id
+  this.name = device.room ? `${device.name} ${device.room}` : device.name
+  this.model = device.protocol
+  this.device = device
+  this.log = log
+  this.manufacturer = device.manufacturer
+  this.fetchHoumioLights = fetchHoumioLights.bind(null, siteKey)
+}
+
 HoumioPlatform.prototype = {
   accessories: function(callback) {
-    this.log("Fetching houmio lights...");
-    var that = this;
+    this.log("Fetching houmio lights...")
 
-    socket.on("connect", function() {
-      socket.emit('clientReady', { siteKey })
+    socket.on("connect", _ => {
+      socket.emit('clientReady', { siteKey: this.siteKey })
     })
-    fetchHoumioLights()
-      .then(lights => {
-        const foundAccessories = lights.map(l => {
-          return new HoumioAccessory(that.log, l, {})
-        })
 
-        callback(foundAccessories);
+    this.fetchHoumioLights()
+      .then(lights => {
+        const foundAccessories = lights.map(l => new HoumioAccessory(this.log, l, this.siteKey))
+        callback(foundAccessories)
     })
   }
 }
@@ -64,11 +64,11 @@ HoumioAccessory.prototype = {
   extractValue: function(characteristic, status) {
     switch(characteristic.toLowerCase()) {
       case 'power':
-        return status.on ? 1 : 0;
+        return status.on ? 1 : 0
       case 'brightness':
-        return this.bitsToPercentage(status.bri);
+        return this.bitsToPercentage(status.bri)
       default:
-        return null;
+        return null
     }
   },
 
@@ -76,7 +76,7 @@ HoumioAccessory.prototype = {
     const supportedCommands = ['power', 'brightness']
 
     if(R.any(R.equals, supportedCommands)){
-      fetchHoumioLights()
+      this.fetchHoumioLights()
       .then(lights => lights.filter(({_id}) => _id === this.id))
       .then(({on}) => {
         if(!on && cmd === 'power' && (value === 1 || value === true)){
@@ -95,8 +95,8 @@ HoumioAccessory.prototype = {
     }
   },
 
-  getState: function(characteristic, callback) {
-    fetchHoumioLights()
+  getState: function(characteristic, callback){
+    this.fetchHoumioLights()
       .then(lights => lights.find(({_id}) => _id === this.id))
       .then(light => this.extractValue(characteristic, light))
       .then(value => callback(null, value))
@@ -107,22 +107,23 @@ HoumioAccessory.prototype = {
   },
 
   getServices: function() {
-    var that = this;
-
     // Use HomeKit types defined in HAP node JS
     var lightbulbService = new Service.Lightbulb(this.name)
 
-    lightbulbService
-    .getCharacteristic(Characteristic.On)
-    .on('get', function(callback) { that.getState("power", callback)})
-    .on('set', function(value, callback) { that.executeChange("power", value, callback)})
-    .value = this.extractValue("power", this.device)
+    const getState = this.getState.bind(this)
+    const executeChange = this.executeChange.bind(this)
 
     lightbulbService
-    .addCharacteristic(Characteristic.Brightness)
-    .on('get', function(callback) { that.getState("brightness", callback);})
-    .on('set', function(value, callback) { that.executeChange("brightness", value, callback)})
-    .value = this.extractValue("brightness", this.device)
+      .getCharacteristic(Characteristic.On)
+      .on('get', callback => { getState("power", callback)})
+      .on('set', (value, callback) => { executeChange("power", value, callback)})
+      .value = this.extractValue("power", this.device)
+
+    lightbulbService
+      .addCharacteristic(Characteristic.Brightness)
+      .on('get', callback => { getState("brightness", callback)})
+      .on('set', (value, callback) => { executeChange("brightness", value, callback)})
+      .value = this.extractValue("brightness", this.device)
 
     var informationService = new Service.AccessoryInformation()
 
@@ -130,8 +131,8 @@ HoumioAccessory.prototype = {
       .setCharacteristic(Characteristic.Manufacturer, this.manufacturer)
       .setCharacteristic(Characteristic.Model, this.model)
       .setCharacteristic(Characteristic.SerialNumber, this.device.uniqueid)
-      .addCharacteristic(Characteristic.FirmwareRevision, this.device.swversion);
+      .addCharacteristic(Characteristic.FirmwareRevision, this.device.swversion)
 
-    return [informationService, lightbulbService];
+    return [informationService, lightbulbService]
   }
-};
+}
