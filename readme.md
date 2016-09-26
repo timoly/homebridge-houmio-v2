@@ -15,7 +15,8 @@ Configuration sample:
 "platforms": [
         {
           "platform": "Houmio",
-          "name": "Houmio"
+          "name": "Houmio",
+          "siteKey": "abc123..."
         }   
     ]
 
