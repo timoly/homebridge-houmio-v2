@@ -4,18 +4,27 @@ const socket = io('https://houmi.herokuapp.com')
 const rp = require('request-promise')
 
 var Service, Characteristic
+
 module.exports = function(homebridge) {
   Service = homebridge.hap.Service
   Characteristic = homebridge.hap.Characteristic
   homebridge.registerPlatform("homebridge-houmio", "Houmio", HoumioPlatform)
 }
 
+var cachedLights, statusUpdate = 0
 function fetchHoumioLights(siteKey){
-  return rp({
-    uri: `https://houmi.herokuapp.com/api/site/${siteKey}`,
-    json: true
-  })
-  .then(({lights}) => lights)
+  if((Date.now() - statusUpdate) > 3000){
+    statusUpdate = Date.now()
+    return rp({
+      uri: `https://houmi.herokuapp.com/api/site/${siteKey}`,
+      json: true
+    })
+    .then(({lights}) => {
+      cachedLights = lights
+      return lights
+    })
+  }
+  return new Promise(res => res(cachedLights))
 }
 
 function HoumioPlatform(log, config) {
