@@ -1,6 +1,6 @@
 {
   "name": "homebridge-houmio-v2",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Houm.io v2 plugin for homebridge: https://github.com/nfarina/homebridge",
   "license": "MIT",
   "keywords": [

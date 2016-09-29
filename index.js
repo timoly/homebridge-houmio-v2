@@ -44,6 +44,7 @@ function HoumioAccessory(log, device, siteKey) {
   this.log = log
   this.manufacturer = device.manufacturer
   this.fetchHoumioLights = fetchHoumioLights.bind(null, siteKey)
+  this.type = device.type
 }
 
 HoumioPlatform.prototype = {
@@ -86,19 +87,20 @@ HoumioAccessory.prototype = {
 
     if(R.any(R.equals, supportedCommands)){
       this.fetchHoumioLights()
-      .then(lights => lights.filter(({_id}) => _id === this.id))
+      .then(lights => lights.find(({_id}) => _id === this.id))
       .then(({on}) => {
-        if(!on && cmd === 'power' && (value === 1 || value === true)){
-          return {bri: 255}
+        if(on && cmd === 'power' && Boolean(value)){
+          return callback()
         }
-        else if(cmd === 'brightness'){
-          return {bri: this.percentageToBits(value)}
-        }
-        return {}
-      })
-      .then(brightness => {
-        const on = {on: cmd === 'power' && (value === 0 || value === false) ? false : true}
-        socket.emit('apply/light', R.mergeAll([{_id: this.id}, on, brightness]))
+
+        const brightness = cmd === 'brightness' ? {bri: this.percentageToBits(value)} : {}
+        const data = R.mergeAll([
+          {_id: this.id},
+          {on: cmd === 'power' && !Boolean(value) ? false : true},
+          brightness
+        ])
+
+        socket.emit('apply/light', data)
         callback()
       })
     }
@@ -128,11 +130,13 @@ HoumioAccessory.prototype = {
       .on('set', (value, callback) => { executeChange("power", value, callback)})
       .value = this.extractValue("power", this.device)
 
-    lightbulbService
-      .addCharacteristic(Characteristic.Brightness)
-      .on('get', callback => { getState("brightness", callback)})
-      .on('set', (value, callback) => { executeChange("brightness", value, callback)})
-      .value = this.extractValue("brightness", this.device)
+    if(this.type !== 'binary'){
+      lightbulbService
+        .addCharacteristic(Characteristic.Brightness)
+        .on('get', callback => { getState("brightness", callback)})
+        .on('set', (value, callback) => { executeChange("brightness", value, callback)})
+        .value = this.extractValue("brightness", this.device)
+      }
 
     var informationService = new Service.AccessoryInformation()
 
