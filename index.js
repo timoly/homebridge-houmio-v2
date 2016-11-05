@@ -125,14 +125,14 @@ HoumioAccessory.prototype = {
       .getCharacteristic(Characteristic.On)
       .on('get', callback => { getState("power", callback)})
       .on('set', (value, callback) => { executeChange("power", value, callback)})
-      .value = this.extractValue("power", this.device, "foo1")
+      .value = this.extractValue("power", this.device)
 
     if(this.type !== 'binary'){
       lightbulbService
         .addCharacteristic(Characteristic.Brightness)
         .on('get', callback => { getState("brightness", callback)})
         .on('set', (value, callback) => { executeChange("brightness", value, callback)})
-        .value = this.extractValue("brightness", this.device, "foo2")
+        .value = this.extractValue("brightness", this.device)
       }
 
     var informationService = new Service.AccessoryInformation()
