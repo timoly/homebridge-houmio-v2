@@ -11,20 +11,17 @@ module.exports = function(homebridge) {
   homebridge.registerPlatform("homebridge-houmio", "Houmio", HoumioPlatform)
 }
 
-var cachedLights, statusUpdate = 0
+var statusUpdate = 0, statusPromise
 function fetchHoumioLights(siteKey){
   if((Date.now() - statusUpdate) > 3000){
     statusUpdate = Date.now()
-    return rp({
+    statusPromise = rp({
       uri: `https://houmi.herokuapp.com/api/site/${siteKey}`,
       json: true
     })
-    .then(({lights}) => {
-      cachedLights = lights
-      return lights
-    })
+    .then(({lights}) => lights)
   }
-  return new Promise(res => res(cachedLights))
+  return statusPromise
 }
 
 function HoumioPlatform(log, config) {
@@ -128,14 +125,14 @@ HoumioAccessory.prototype = {
       .getCharacteristic(Characteristic.On)
       .on('get', callback => { getState("power", callback)})
       .on('set', (value, callback) => { executeChange("power", value, callback)})
-      .value = this.extractValue("power", this.device)
+      .value = this.extractValue("power", this.device, "foo1")
 
     if(this.type !== 'binary'){
       lightbulbService
         .addCharacteristic(Characteristic.Brightness)
         .on('get', callback => { getState("brightness", callback)})
         .on('set', (value, callback) => { executeChange("brightness", value, callback)})
-        .value = this.extractValue("brightness", this.device)
+        .value = this.extractValue("brightness", this.device, "foo2")
       }
 
     var informationService = new Service.AccessoryInformation()
